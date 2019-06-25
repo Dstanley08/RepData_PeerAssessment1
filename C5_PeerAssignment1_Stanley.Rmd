@@ -1,0 +1,151 @@
+---
+title: "Reproducible Research: Peer Assessment 1"
+output: 
+  html_document:
+    keep_md: true
+---
+
+
+## Loading and preprocessing the data
+Reading in the .csv file and creating a new dates format to be used when finding the total steps per day:
+```{r}
+#1 Code to Read in the Data:
+activity_data=read.csv("activity.csv")
+dates=c(paste0("10/",1:31,"/2012"),paste0("11/",1:30,"/2012"))
+
+#2 calculate the total number of steps per day and make a histogram
+total=NULL
+for (i in 1:length(dates)) {
+  total[i]=with(activity_data, sum(steps[date == dates[i]]),na.rm=TRUE)
+}
+#Dataframe for total steps taken per day
+tot_steps <- data.frame(dates,total)
+names(tot_steps) <- c("date","total # of Steps")
+head(tot_steps)
+```
+
+
+## What is mean total number of steps taken per day?
+```{r}
+#make a histogram of the total number of steps taken per day
+hist(tot_steps$`total # of Steps`,xlab="total steps taken per day",main="Total steps taken per day")
+
+#3 Calculate the Mean and Median number of steps in a day
+AvG_day=mean(tot_steps$`total # of Steps`,na.rm=TRUE)
+Med_day=median(tot_steps$`total # of Steps`,na.rm=TRUE)
+data.frame(AvG_day,Med_day)
+```
+
+
+## What is the average daily activity pattern?
+```{r}
+#4 Create a time series plot of average number of steps in each 5-min interval averaged over all days
+library(plyr)
+interval_steps=ddply(activity_data, "interval", summarise, avg_steps = mean(steps,na.rm=TRUE))
+plot(interval_steps$interval,interval_steps$avg_steps,type="l",xlab="5-min interval",ylab="Avg # of Steps across all days",
+     main="Average Daily Activity Pattern")
+
+#5locate the interval that has the maximum number of steps
+max_interval=interval_steps$interval[which.max(interval_steps$avg_steps)]
+```
+
+The maximum number of steps occurs during the following 5-minute interal:
+
+```{r}
+max_interval
+```
+## Imputing missing values
+
+The strategy used to handle missing values in the dataset was to replace a particular NA value with the average number of steps over the 2 month period for the corresponding 5 minute interval. For example if 10/1/2012 was "NA" for interval 250, it would be replaced with the average number of steps for interval 250 taken from the available data.
+
+First, of the 17568 possible data points between 10/1/2012 and 11/30/2012, let's see how many are missing:
+
+```{r}
+#6 Code to impute missing values
+#determine the total number of missing values
+total_NA=sum(is.na(activity_data$steps))
+total_NA
+```
+
+
+```{r}
+
+#imputing data to replace NA values with the 2 month average for that particular time interval
+#creating a new data set with the missing data filled in that is same size of the original data set
+activity_data_new=activity_data
+for (i in 1:nrow(activity_data_new)){
+  if (is.na(activity_data_new[i,1])){
+    activity_data_new[i,1]=interval_steps$avg_steps[interval_steps$interval == activity_data_new[i,3]]
+  }
+}
+#calculate the total number of steps per day for new data frame containing imputed values
+total_new=NULL
+for (i in 1:length(dates)) {
+  total_new[i]=with(activity_data_new, sum(steps[date == dates[i]]),na.rm=TRUE)
+}
+
+# Build Dataframe for total steps taken per day
+tot_steps_new <- data.frame(dates,total_new)
+names(tot_steps_new) <- c("date","total # of Steps")
+```
+
+Now, looking at the new dataframe containing the total steps taken per day we see that 10/1/2012 is changed from NA to a value based on the 2 month average:
+
+```{r}
+head(tot_steps_new)
+```
+
+```{r}
+#make a histogram of the total number of steps taken per day of the data frame containing imputed values
+hist(tot_steps_new$`total # of Steps`,xlab="total steps taken per day",main="Total steps taken per day (inputed data)")
+
+#Calculate the Mean and Median number of steps in a day of the new data frame
+AvG_day_new=mean(tot_steps_new$`total # of Steps`,na.rm=TRUE)
+Med_day_new=median(tot_steps_new$`total # of Steps`,na.rm=TRUE)
+```
+
+We can now compare the calculations based off of the original data to the values of the dataset with imputed data:
+```{r}
+#Compare New and Old Values
+Differences=data.frame(AvG_day,AvG_day_new,Med_day,Med_day_new)
+Differences
+```
+
+## Are there differences in activity patterns between weekdays and weekends?
+
+In this section we will add a column to the dataframe that labels the date as either "weekday" or "weekend", subset the data based on if the particular date falls on a weekday or weekend day and perform the same calculations as above to determine if this has any influence on the activity levels. 
+
+```{r}
+#Add a column to the imputed dataframe "Weekday" and "weekend"
+activity_data_new_days=activity_data_new
+activity_data_new_days$ddate <- strftime(strptime(activity_data_new_days$date,"%m/%d/%Y"),"%Y-%m-%d")
+activity_data_new_days$day <- weekdays(as.Date(activity_data_new_days$ddate))
+
+for (i in 1:nrow(activity_data_new_days)){
+  if (activity_data_new_days[i,5] %in% c('Saturday','Sunday')){
+    activity_data_new_days[i,5]='weekend'}
+    else{
+      activity_data_new_days[i,5]= 'weekday'
+      }
+}
+head(activity_data_new_days)
+```
+
+Finally we will create a time series plot again to show differences between the weekday and weekend activity as shown below:
+```{r}
+#8 Create a time series plot of average number of steps in each 5-min interval averaged over all days
+weekend_steps = subset(activity_data_new_days, day == "weekend")
+weekday_steps = subset(activity_data_new_days, day == "weekday")
+
+interval_steps_weekend=ddply(weekend_steps, "interval", summarise, avg_steps = mean(steps,na.rm=TRUE))
+interval_steps_weekday=ddply(weekday_steps, "interval", summarise, avg_steps = mean(steps,na.rm=TRUE))
+library(ggplot2)
+library(gridExtra)
+require(gridExtra)
+plot3_1 <- ggplot(interval_steps_weekday, aes(interval,avg_steps)) + geom_line()+ylab("Number of Steps")+labs(title= "Weekday")
+plot3_2 <- ggplot(interval_steps_weekend, aes(interval,avg_steps)) + geom_line()+ylab("Number of Steps")+labs(title= "Weekend")
+grid.arrange(plot3_1, plot3_2, ncol=1)
+
+```
+
+One can see by comparison that the weekend activity has overall lower values of steps when compared to the weekday activity. 
